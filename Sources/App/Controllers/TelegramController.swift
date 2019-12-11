@@ -24,17 +24,14 @@ private let token = readToken(from: DirectoryConfig.detect().workDir+"/"+"HELLO_
 private let bot = TelegramBot(token: token)
 private let router = Router(bot: bot)
 
-final class TelegramController {
-    static let shared = TelegramController()
-    private init() {
-        start()
-    }
+public final class TelegramController {
+    public static let shared = TelegramController()
+    private init() {}
     
-    var res: EventLoopFuture<HTTPResponse>!
-    let worker = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-//    let client = HTTPClient(on: MultiThreadedEventLoopGroup(numberOfThreads: 1))
+    public var app: Application?
     
-    private func start() {
+    
+    public  func start() {
         router[.location] = onInitialLocation
         router.unsupportedContentType = onLocationUpdates
         
@@ -52,8 +49,8 @@ final class TelegramController {
     func onInitialLocation(context: Context) -> Bool {
         guard let from = context.message?.from, let location = context.message?.location else { return false }
         getDrivingEstimation(for: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { time in
-            context.respondAsync("Hello, \(from.firstName)! Your estimated driving time: \(time/60) min")
-            self.pushToLametric(time: Int(time/60))
+            context.respondAsync("Hello, \(from.firstName)! Your estimated driving time: \(time)")
+            self.pushToLametric(time: time)
         }
         
         return true
@@ -65,75 +62,25 @@ final class TelegramController {
         return true
     }
     
-//    func thirdPartyApiCall(on req: Request) throws -> Future<Response> {
-//        let client = try req.client()
-//        struct SomePayload: Content {
-//            let title: String
-//            let year: Int
-//        }
-//        return client.post("http://www.example.com/example/post/request", beforeSend: { req in
-//            let payload = SomePayload(title: "How to make api call", year: 2019)
-//            try req.content.encode(payload, as: .json)
-//        })
-//    }
-    
-    func pushToLametric(time: Int) {
-//        var postHeaders: HTTPHeaders = .init()
-//        postHeaders.add(name: .contentType, value: "application/json")
-//        postHeaders.add(name: "X-Access-Token", value: "ODljYzhkZDkzZTg2ZWI5NGJmZTk5OWJlOTE0MWY5YWRmMzhkMzNmOWFiZTQxNjQ3OWJkMmNjN2FjNGFhOTZhYQ==")
-//
-//        let worker = MultiThreadedEventLoopGroup(numberOfThreads: 1)
-//
-//        let encoder = JSONEncoder()
-//        let data = Response(icon: "i3354", text: "\(time) min", index: 0)
-//        let jsonData = try! encoder.encode(data)
-//        let jsonString = String(data: jsonData, encoding: .utf8)!
-//        let postBody = HTTPBody(string: jsonString)
-//
-//        let httpReq = HTTPRequest(method: .POST, url: "")
-//        let httpRes = HTTPClient.connect(hostname: "https://developer.lametric.com/api/V1/dev/widget/update/com.lametric.aa3371b948ebd7e8caa4cc829b4f165f/1", on: worker)
-//
-//        .flatMap(to: HTTPResponse.self) { client in
-//          req.http.headers = postHeaders
-//          req.http.contentType = .json
-//          req.http.body = postBody
-//          return client.send(httpReq).flatMap(to: singleGet.self) { res in
-//            return try req.content.decode(singleGet.self)
-//          }
-//        }
-        
-        
+    func pushToLametric(time: String) {
         var headers: HTTPHeaders = .init()
         headers.add(name: .accept, value: "application/json")
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "X-Access-Token", value: "ODljYzhkZDkzZTg2ZWI5NGJmZTk5OWJlOTE0MWY5YWRmMzhkMzNmOWFiZTQxNjQ3OWJkMmNjN2FjNGFhOTZhYQ==")
-        let encoder = JSONEncoder()
-        let data = Response(icon: "i3354", text: "\(time) min", index: 0)
-        let jsonData = try! encoder.encode(data)
-        let jsonString = String(data: jsonData, encoding: .utf8)!
-
-        let body = HTTPBody(string: jsonString)
-        let request = HTTPRequest(method: .POST, url: "https://developer.lametric.com/api/V1/dev/widget/update/com.lametric.14d0842ed313043cdd87afb4caf7a81c/1", headers: headers, body: body)
-//        let httpReq = HTTPRequest(
-//            method: .POST,
-//            url: URL(string: "/api/V1/dev/widget/update/com.lametric.14d0842ed313043cdd87afb4caf7a81c/1")!,
-//            headers: headers,
-//            body: body)
-
-//        client.send(request)
         
-        let client = HTTPClient.connect(hostname: "https://developer.lametric.com", on: worker)
-        res = client.flatMap(to: HTTPResponse.self) { client in
-            return client.send(request)
-        }
+        guard let app = app else { return }
+        let response = Frame(frames: [Response(icon: "8685", text: time, index: 0)])
+        let client = try? app.client()
+        let _ = client?.post("https://developer.lametric.com/api/V1/dev/widget/update/com.lametric.14d0842ed313043cdd87afb4caf7a81c/2", headers: headers, beforeSend: { request in
+            try request.content.encode(response)
+        })
     }
     
-    func getDrivingEstimation(for coordinate: CLLocationCoordinate2D, completion: @escaping (TimeInterval) -> Void) {
+    func getDrivingEstimation(for coordinate: CLLocationCoordinate2D, completion: @escaping (String) -> Void) {
         let request = MKDirectionsRequest()
         request.transportType = .automobile
-//        request.source = MKMapItem.forCurrentLocation()
         
-        let home = CLLocationCoordinate2D(latitude: 48.043566, longitude: 12.51120)
+        let home = CLLocationCoordinate2D(latitude: 47.043560, longitude: 12.51120)
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: home))
         request.requestsAlternateRoutes = false
@@ -145,34 +92,31 @@ final class TelegramController {
                 print("Error getting directions")
             } else {
                 guard let route = response?.routes.last else { return }
-                completion(route.expectedTravelTime)
+                
+//                let time = Int(route.expectedTravelTime/60)
+//                var timeString: String
+//                switch time {
+//                case let time where time > 0 && time <= 5:
+//                    timeString = "<5 min"
+//                case let time where time > 5 && time < 60:
+//                    timeString = "\(time) min"
+//                case let time where time >= 60:
+//                    timeString = "\(Int(time/60)) h"
+//                default:
+//                    timeString = "0 min"
+//                }
+                completion(route.expectedTravelTime.asString(style: .abbreviated))
             }
         })
     }
-    
-//    func showRoute(_ response: MKDirectionsResponse) {
-//
-//        for route in response.routes {
-//
-//            routeMap.add(route.polyline,
-//                    level: MKOverlayLevel.aboveRoads)
-//            for step in route.steps {
-//                print(step.instructions)
-//            }
-//        }
-//    }
-    
-//    public func routes(_ router: Router) throws {
-//        // Basic "It works" example
-//        router.get { req -> Future<Frame> in
-//            let res = try req.client().get("https://api.chucknorris.io/jokes/random")
-//            let chuckFact = res.flatMap(to: ChuckFact.self) { response in
-//                return try! response.content.decode(ChuckFact.self)
-//            }.map(to: Frame.self, { fact -> Frame in
-//                return Frame(frames: [Response(icon: "i32945", text: fact.value)])
-//            })
-//
-//            return chuckFact
-//        }
-//    }
+}
+
+extension Double {
+    func asString(style: DateComponentsFormatter.UnitsStyle) -> String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = style
+        guard let formattedString = formatter.string(from: self) else { return "" }
+        return formattedString
+    }
 }

@@ -12,4 +12,10 @@ import App
 //    }
 //}
 
-try app(.detect()).run()
+let telegram = TelegramController.shared
+
+let application = try app(.detect())
+telegram.app = application
+telegram.start()
+
+try application.run()
