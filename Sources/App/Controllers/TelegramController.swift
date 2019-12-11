@@ -33,6 +33,7 @@ public final class TelegramController {
     
     public  func start() {
         router[.location] = onInitialLocation
+        router["stop"] = onStop
         router.unsupportedContentType = onLocationUpdates
         
         while let update = bot.nextUpdateSync() {
@@ -50,8 +51,14 @@ public final class TelegramController {
         guard let from = context.message?.from, let location = context.message?.location else { return false }
         getDrivingEstimation(for: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { time in
             context.respondAsync("Hello, \(from.firstName)! Your estimated driving time: \(time)")
-            self.pushToLametric(time: time)
+            self.pushToLametric(text: time)
         }
+        
+        return true
+    }
+    
+    func onStop(context: Context) -> Bool {
+        pushToLametric(text: "0 min")
         
         return true
     }
@@ -62,14 +69,14 @@ public final class TelegramController {
         return true
     }
     
-    func pushToLametric(time: String) {
+    func pushToLametric(text: String) {
         var headers: HTTPHeaders = .init()
         headers.add(name: .accept, value: "application/json")
         headers.add(name: "Cache-Control", value: "no-cache")
         headers.add(name: "X-Access-Token", value: "ODljYzhkZDkzZTg2ZWI5NGJmZTk5OWJlOTE0MWY5YWRmMzhkMzNmOWFiZTQxNjQ3OWJkMmNjN2FjNGFhOTZhYQ==")
         
         guard let app = app else { return }
-        let response = Frame(frames: [Response(icon: "8685", text: time, index: 0)])
+        let response = Frame(frames: [Response(icon: "8685", text: text, index: 0)])
         let client = try? app.client()
         let _ = client?.post("https://developer.lametric.com/api/V1/dev/widget/update/com.lametric.14d0842ed313043cdd87afb4caf7a81c/2", headers: headers, beforeSend: { request in
             try request.content.encode(response)
@@ -80,7 +87,7 @@ public final class TelegramController {
         let request = MKDirectionsRequest()
         request.transportType = .automobile
         
-        let home = CLLocationCoordinate2D(latitude: 47.043560, longitude: 12.51120)
+        let home = CLLocationCoordinate2D(latitude: 48.138321, longitude: 11.615005)
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: home))
         request.requestsAlternateRoutes = false
@@ -92,19 +99,6 @@ public final class TelegramController {
                 print("Error getting directions")
             } else {
                 guard let route = response?.routes.last else { return }
-                
-//                let time = Int(route.expectedTravelTime/60)
-//                var timeString: String
-//                switch time {
-//                case let time where time > 0 && time <= 5:
-//                    timeString = "<5 min"
-//                case let time where time > 5 && time < 60:
-//                    timeString = "\(time) min"
-//                case let time where time >= 60:
-//                    timeString = "\(Int(time/60)) h"
-//                default:
-//                    timeString = "0 min"
-//                }
                 completion(route.expectedTravelTime.asString(style: .abbreviated))
             }
         })
