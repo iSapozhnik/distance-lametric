@@ -58,7 +58,7 @@ public final class TelegramController {
     }
     
     func onStop(context: Context) -> Bool {
-        pushToLametric(text: "0 min")
+        pushToLametric(text: "0m")
         
         return true
     }
