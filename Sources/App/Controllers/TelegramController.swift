@@ -33,9 +33,14 @@ public final class TelegramController {
     
     
     public  func start() {
+        
         router[.location] = onInitialLocation
-        router["stop"] = onStop
+        router[Commands.destination] = onDestination
+        router[Commands.start] = onStart
+        router[Commands.stop] = onStop
         router.unsupportedContentType = onLocationUpdates
+        router["process_word"] = processWord
+
         
         while let update = bot.nextUpdateSync() {
             do {
@@ -48,18 +53,83 @@ public final class TelegramController {
         fatalError("Server stopped due to error: \(bot.lastError.debugDescription)")
     }
     
+    func processWord(context: Context) throws -> Bool {
+        guard let word = context.args.scanWord() else {
+            context.respondAsync("Expected argument")
+            return true
+        }
+        context.respondAsync("You said: \(word)")
+        return true
+    }
+    
+    func onDestination(context: Context) throws -> Bool {
+//        try showMainMenu(context: context, text: "Please choose an option.")
+        guard let word = context.args.scanWord() else {
+            context.respondAsync("Expected argument")
+            return true
+        }
+        
+        context.respondAsync("Your detination is \(word)")
+        return true
+    }
+    
+    func onStart(context: Context) throws -> Bool {
+        let words = context.args.scanWords()
+        guard !words.isEmpty else {
+            context.respondAsync("Expected destination address")
+            return true
+        }
+        
+        context.respondSync("Your detination is \(words[0]), \(words[1])")
+        var markup = ReplyKeyboardMarkup()
+        markup.resizeKeyboard = true
+        markup.keyboardStrings = [
+            [ "Germany", "Ukraine", "USA" ]
+        ]
+        context.respondAsync("Which country?",
+                             replyToMessageId: context.message!.messageId, // ok to pass nil, it will be ignored
+            replyMarkup: markup)
+    
+//        try showMainMenu(context: context, text: "")
+        return true
+    }
+    
+    func onStop(context: Context) -> Bool {
+        let replyTo = context.privateChat ? nil : context.message?.messageId
+        
+        var markup = ReplyKeyboardRemove()
+        markup.selective = replyTo != nil
+        context.respondAsync("Stopping.",
+                             replyToMessageId: replyTo,
+                             replyMarkup: markup)
+        pushToLametric(text: "0m")
+        return true
+    }
+    
+    func showMainMenu(context: Context, text: String) throws {
+        // Use replies in group chats, otherwise bot won't be able to see the text typed by user.
+        // In private chats don't clutter the chat with quoted replies.
+        let replyTo = context.privateChat ? nil : context.message?.messageId
+        
+        var markup = ReplyKeyboardMarkup()
+        //markup.one_time_keyboard = true
+        markup.resizeKeyboard = true
+        markup.selective = replyTo != nil
+        markup.keyboardStrings = [
+            [ Commands.destination[0], Commands.stop[0], Commands.help[0] ]
+        ]
+        context.respondAsync(text,
+            replyToMessageId: replyTo, // ok to pass nil, it will be ignored
+            replyMarkup: markup)
+        
+    }
+    
     func onInitialLocation(context: Context) -> Bool {
         guard let from = context.message?.from, let location = context.message?.location else { return false }
         getDrivingEstimation(for: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { time in
             context.respondAsync("Hello, \(from.firstName)! Your estimated driving time: \(time)")
             self.pushToLametric(text: time)
         }
-        
-        return true
-    }
-    
-    func onStop(context: Context) -> Bool {
-        pushToLametric(text: "0m")
         
         return true
     }
