@@ -24,6 +24,7 @@ private let token = readToken(from: DirectoryConfig.detect().workDir+"/"+"HELLO_
 private let bot = TelegramBot(token: token)
 private let router = Router(bot: bot)
 
+@available(macOS 10.12, *)
 public final class TelegramController {
     public static let shared = TelegramController()
     private init() {}
