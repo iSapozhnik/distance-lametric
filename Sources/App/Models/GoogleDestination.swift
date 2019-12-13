@@ -24,6 +24,10 @@ import Vapor
                   "text" : "28 mins",
                   "value" : 1658
                },
+                 "duration_in_traffic" : {
+                    "text" : "1 min",
+                    "value" : 3
+                 },
                "status" : "OK"
             }
          ]
@@ -59,13 +63,45 @@ enum Status: String, Codable {
 
 // MARK: - Element
 struct Element: Codable {
-    let distance, duration: Distance
-    let status: Status
+    let distance, duration, durationInTraffic: Distance
+    let status: String
+
+    enum CodingKeys: String, CodingKey {
+        case distance, duration
+        case durationInTraffic = "duration_in_traffic"
+        case status
+    }
 }
 
 // MARK: - Distance
 struct Distance: Codable {
     let text: String
     let value: Int
+}
+
+enum TrafficCondition {
+    case none
+    case low
+    case medium
+    case heigh
+}
+
+struct Traffic {
+    let duration: Double
+    let durationInTraffic: Double
+
+    var condition: TrafficCondition {
+        let ratio = abs(1 - Double(durationInTraffic/duration)) * 100
+        switch ratio {
+            case ratio where ratio < 33:
+            return .low
+        case ratio where ratio >= 33 && ratio < 67:
+            return .medium
+        case ratio where ratio >= 67:
+            return .heigh
+        default:
+            return .none
+        }
+    }
 }
 
