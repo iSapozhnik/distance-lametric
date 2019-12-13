@@ -135,7 +135,7 @@ public final class TelegramController {
         guard let location = context.message?.location else { return false }
 
         let address = [userDestination.street, userDestination.number, userDestination.country].compactMap{ $0 }.joined(separator: "+")
-        getDrivingEstimation(to: address, from: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { [weak self] distanceDuration in
+        getDrivingEstimation(to: address, from: location) { [weak self] distanceDuration in
             self?.pushToLametric(data: distanceDuration)
             context.respondAsync("Your estimated driving time: \(distanceDuration.duration), distance: \(distanceDuration.distance)")
 
@@ -148,7 +148,7 @@ public final class TelegramController {
         guard let location = context.message?.location else { return false }
 
         let address = [userDestination.street, userDestination.number, userDestination.country].compactMap{ $0 }.joined(separator: "+")
-        getDrivingEstimation(to: address, from: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { [weak self] distanceDuration in
+        getDrivingEstimation(to: address, from: location) { [weak self] distanceDuration in
             self?.pushToLametric(data: distanceDuration)
             context.respondAsync("Your estimated driving time: \(distanceDuration.duration), distance: \(distanceDuration.distance)")
 
@@ -172,7 +172,7 @@ public final class TelegramController {
         })
     }
     
-    func getDrivingEstimation(to destinationAddress: String, from coordinate: CLLocationCoordinate2D, completion: @escaping ((distance: String, duration: String)) -> Void) {
+    func getDrivingEstimation(to destinationAddress: String, from coordinate: Location, completion: @escaping ((distance: String, duration: String)) -> Void) {
 
         guard let app = app, let client = try? app.client() else { return }
         let address = destinationAddress.addingPercentEncoding(withAllowedCharacters: .alphanumerics)
