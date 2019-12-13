@@ -17,11 +17,11 @@ enum Token {
     var key: String {
         switch self {
         case .telegram:
-            return readToken(from: DirectoryConfig.detect().workDir+"/"+"HELLO_BOT_TOKEN")
+            return readToken(from: DirectoryConfig.detect().workDir+"HELLO_BOT_TOKEN")
         case .google:
-           return readToken(from: DirectoryConfig.detect().workDir+"/"+"GOOGLE_TOKEN")
+           return readToken(from: DirectoryConfig.detect().workDir+"GOOGLE_TOKEN")
         case .lametric:
-            return readToken(from: DirectoryConfig.detect().workDir+"/"+"LAMETRIC_TOKEN")
+            return readToken(from: DirectoryConfig.detect().workDir+"LAMETRIC_TOKEN")
         }
     }
 }
