@@ -7,3 +7,5 @@ DerivedData/
 .swiftpm
 db.sqlite
 HELLO_BOT_TOKEN
+GOOGLE_TOKEN
+LAMETRIC_TOKEN

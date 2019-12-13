@@ -6,7 +6,6 @@
 //
 
 import Vapor
-import Core
 import TelegramBotSDK
 import MapKit
 
@@ -20,21 +19,35 @@ struct Response: Codable, Content {
     var index: Int
 }
 
-private let token = readToken(from: DirectoryConfig.detect().workDir+"/"+"HELLO_BOT_TOKEN")
-private let bot = TelegramBot(token: token)
+struct UserDestination {
+    let street: String
+    let number: String
+    let country: String?
+}
+
+enum State {
+//    case started
+    case destinationRequested(UserDestination)
+    case currentLocationRequested
+    case stopped
+}
+
+private let bot = TelegramBot(token: Token.telegram.key)
 private let router = Router(bot: bot)
 
 @available(macOS 10.10, *)
 public final class TelegramController {
+
     public static let shared = TelegramController()
     private init() {}
     
     public var app: Application?
+    var state: State = .stopped
+    var destination: UserDestination?
     
-    
-    public  func start() {
+    public func start() {
         
-        router[.location] = onInitialLocation
+        router[.location] = onLocationUpdates
         router[Commands.destination] = onDestination
         router[Commands.start] = onStart
         router[Commands.stop] = onStop
@@ -63,7 +76,6 @@ public final class TelegramController {
     }
     
     func onDestination(context: Context) throws -> Bool {
-//        try showMainMenu(context: context, text: "Please choose an option.")
         guard let word = context.args.scanWord() else {
             context.respondAsync("Expected argument")
             return true
@@ -75,34 +87,29 @@ public final class TelegramController {
     
     func onStart(context: Context) throws -> Bool {
         let words = context.args.scanWords()
-        guard !words.isEmpty else {
-            context.respondAsync("Expected destination address")
+        let number = words.map { Int($0) }.compactMap { $0 }.last
+        guard !words.isEmpty, number != nil else {
+            context.respondAsync("Expected destination address in format: <street> <house number> <country>")
             return true
         }
+
+        let destination = UserDestination(street: words[0], number: String(number!), country: words.last)
+        self.destination = destination
+        state = .destinationRequested(destination)
         
-        context.respondSync("Your detination is \(words[0]), \(words[1])")
-        var markup = ReplyKeyboardMarkup()
-        markup.resizeKeyboard = true
-        markup.keyboardStrings = [
-            [ "Germany", "Ukraine", "USA" ]
-        ]
-        context.respondAsync("Which country?",
-                             replyToMessageId: context.message!.messageId, // ok to pass nil, it will be ignored
-            replyMarkup: markup)
-    
-//        try showMainMenu(context: context, text: "")
+        context.respondSync("Your detination is \(destination.street), \(destination.number), \(destination.country ?? "")")
+        context.respondSync("Now, share your live location...")
         return true
     }
     
     func onStop(context: Context) -> Bool {
-        let replyTo = context.privateChat ? nil : context.message?.messageId
-        
+        state = .stopped
         var markup = ReplyKeyboardRemove()
-        markup.selective = replyTo != nil
+        markup.selective = true
         context.respondAsync("Stopping.",
-                             replyToMessageId: replyTo,
+                             replyToMessageId: nil,
                              replyMarkup: markup)
-        pushToLametric(text: "0m")
+        pushToLametric(data: ("0km", "0m"))
         return true
     }
     
@@ -125,54 +132,84 @@ public final class TelegramController {
     }
     
     func onInitialLocation(context: Context) -> Bool {
-        guard let from = context.message?.from, let location = context.message?.location else { return false }
-        getDrivingEstimation(for: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { time in
-            context.respondAsync("Hello, \(from.firstName)! Your estimated driving time: \(time)")
-            self.pushToLametric(text: time)
+        guard case State.destinationRequested(let userDestination) = state else { return false }
+        guard let location = context.message?.location else { return false }
+
+        let address = [userDestination.street, userDestination.number, userDestination.country].compactMap{ $0 }.joined(separator: "+")
+        getDrivingEstimation(to: address, from: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { [weak self] distanceDuration in
+            self?.pushToLametric(data: distanceDuration)
+            context.respondAsync("Your estimated driving time: \(distanceDuration.duration), distance: \(distanceDuration.distance)")
+
         }
-        
         return true
     }
     
     func onLocationUpdates(context: Context) -> Bool {
-        guard let from = context.message?.from, let location = context.message?.location else { return false }
-        context.respondAsync("Hello, \(from.firstName)! New location: \(location.latitude), \(location.longitude)")
+        guard case State.destinationRequested(let userDestination) = state else { return false }
+        guard let location = context.message?.location else { return false }
+
+        let address = [userDestination.street, userDestination.number, userDestination.country].compactMap{ $0 }.joined(separator: "+")
+        getDrivingEstimation(to: address, from: CLLocationCoordinate2D(latitude: CLLocationDegrees(location.latitude), longitude: CLLocationDegrees(location.longitude))) { [weak self] distanceDuration in
+            self?.pushToLametric(data: distanceDuration)
+            context.respondAsync("Your estimated driving time: \(distanceDuration.duration), distance: \(distanceDuration.distance)")
+
+        }
         return true
     }
     
-    func pushToLametric(text: String) {
+    func pushToLametric(data: (distance: String, duration: String)) {
         var headers: HTTPHeaders = .init()
         headers.add(name: .accept, value: "application/json")
         headers.add(name: "Cache-Control", value: "no-cache")
-        headers.add(name: "X-Access-Token", value: "ODljYzhkZDkzZTg2ZWI5NGJmZTk5OWJlOTE0MWY5YWRmMzhkMzNmOWFiZTQxNjQ3OWJkMmNjN2FjNGFhOTZhYQ==")
+        headers.add(name: "X-Access-Token", value: Token.lametric.key)
         
         guard let app = app else { return }
-        let response = Frame(frames: [Response(icon: "8685", text: text, index: 0)])
+        let distanceResponse = Response(icon: "12110", text: data.distance, index: 0)
+        let durationResponse = Response(icon: "8685", text: data.duration, index: 1)
+        let response = Frame(frames: [distanceResponse, durationResponse])
         let client = try? app.client()
         let _ = client?.post("https://developer.lametric.com/api/V1/dev/widget/update/com.lametric.14d0842ed313043cdd87afb4caf7a81c/2", headers: headers, beforeSend: { request in
             try request.content.encode(response)
         })
     }
     
-    func getDrivingEstimation(for coordinate: CLLocationCoordinate2D, completion: @escaping (String) -> Void) {
-        let request = MKDirectionsRequest()
-        request.transportType = .automobile
-        
-        let home = CLLocationCoordinate2D(latitude: 48.138321, longitude: 11.615005)
-        request.source = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
-        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: home))
-        request.requestsAlternateRoutes = false
+    func getDrivingEstimation(to destinationAddress: String, from coordinate: CLLocationCoordinate2D, completion: @escaping ((distance: String, duration: String)) -> Void) {
 
-        let directions = MKDirections(request: request)
-
-        directions.calculate(completionHandler: {(response, error) in
-            if error != nil {
-                print("Error getting directions")
-            } else {
-                guard let route = response?.routes.last else { return }
-                completion(route.expectedTravelTime.asString(style: .abbreviated))
+        guard let app = app, let client = try? app.client() else { return }
+        let address = destinationAddress.addingPercentEncoding(withAllowedCharacters: .alphanumerics)
+        let urlString = "https://maps.googleapis.com/maps/api/distancematrix/json?units=metric&origins=\(coordinate.latitude),\(coordinate.longitude)&destinations=\(address!)&key=\(Token.google.key)"
+        let result = client.get(urlString).flatMap(to: GoogleDestination.self) { response in
+            return try response.content.decode(GoogleDestination.self)
+        }
+        result.whenComplete {
+            let _ = result.map { destination in
+                guard let element = destination.rows.last?.elements.last else {
+                    completion(("0km", "0m"))
+                    return
+                }
+                completion((element.distance.text, element.duration.text))
             }
-        })
+        }
+
+
+//        let request = MKDirectionsRequest()
+//        request.transportType = .automobile
+//
+//        let home = CLLocationCoordinate2D(latitude: 48.138321, longitude: 11.615005)
+//        request.source = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
+//        request.destination = MKMapItem(placemark: MKPlacemark(coordinate: home))
+//        request.requestsAlternateRoutes = false
+//
+//        let directions = MKDirections(request: request)
+//
+//        directions.calculate(completionHandler: {(response, error) in
+//            if error != nil {
+//                print("Error getting directions")
+//            } else {
+//                guard let route = response?.routes.last else { return }
+//                completion(route.expectedTravelTime.asString(style: .abbreviated))
+//            }
+//        })
     }
 }
 
