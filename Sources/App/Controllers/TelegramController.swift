@@ -7,7 +7,6 @@
 
 import Vapor
 import TelegramBotSDK
-import MapKit
 
 struct Frame: Codable, Content {
     var frames: [Response]
