@@ -8,6 +8,26 @@
 import Vapor
 import TelegramBotSDK
 
+extension EventLoop {
+
+    /// Create a timer-like method that delays execution some
+    /// amount of time
+    ///
+    public func execute(in delay: TimeAmount, _ task: @escaping ()->()) -> Future<Void> {
+        let promise = self.newPromise(Void.self)
+
+        self.scheduleTask(in: delay) {
+            // Execute the task
+            task()
+
+            // Fulfill the promise
+            promise.succeed()
+        }
+
+        return promise.futureResult
+    }
+}
+
 struct Frame: Codable, Content {
     var frames: [Response]
 }
@@ -66,15 +86,36 @@ public final class TelegramController {
         router[Commands.help.text] = onHelp
         router.unsupportedContentType = onLocationUpdates
 
-        while let update = bot.nextUpdateSync() {
-            do {
-                try router.process(update: update)
-            } catch {
-                print(error.localizedDescription)
+
+//        func runRepeatTimer() {
+//            app?.eventLoop.scheduleTask(in: TimeAmount.seconds(1), runRepeatTimer)
+//            checkUpdates()
+//        }
+//        runRepeatTimer()
+//
+//        func checkUpdates() {
+//            while let update = bot.nextUpdateSync() {
+//                do {
+//                    try router.process(update: update)
+//                } catch {
+//                    print(error.localizedDescription)
+//                }
+//            }
+//        }
+
+        DispatchQueue.global().async {
+            while let update = bot.nextUpdateSync() {
+                do {
+                    try router.process(update: update)
+                } catch {
+                    print(error.localizedDescription)
+                }
             }
+            fatalError("Server stopped due to error: \(bot.lastError.debugDescription)")
         }
 
-        fatalError("Server stopped due to error: \(bot.lastError.debugDescription)")
+
+
     }
     
     func onStart(context: Context) throws -> Bool {
