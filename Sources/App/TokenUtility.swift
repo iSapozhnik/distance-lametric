@@ -19,9 +19,9 @@ enum Token {
         case .telegram:
             return readToken(from: "HELLO_BOT_TOKEN")
         case .google:
-           return readToken(from: DirectoryConfig.detect().workDir+"GOOGLE_TOKEN")
+           return readToken(from: "GOOGLE_TOKEN")
         case .lametric:
-            return readToken(from: DirectoryConfig.detect().workDir+"LAMETRIC_TOKEN")
+            return readToken(from: "LAMETRIC_TOKEN")
         }
     }
 }
